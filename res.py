@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import ipaddress
 import datetime
 import logging
 import random
@@ -10,6 +11,7 @@ from trytond.model import ModelSQL, fields
 from trytond.pool import PoolMeta, Pool
 from trytond.pyson import Eval
 from trytond.tools import resolve
+from trytond.transaction import Transaction
 
 __all__ = ['User', 'SMSCode']
 logger = logging.getLogger(__name__)
@@ -47,6 +49,17 @@ class User(metaclass=PoolMeta):
         pool = Pool()
         SMSCode = pool.get('res.user.login.sms_code')
         user_id = cls._get_login(login)[0]
+
+        # hack for ip whitelist
+        user_ip = Transaction().context.get('_request', {}).get('remote_addr')
+        if user_ip:
+            ip = ipaddress.ip_network(user_ip)
+            for entry in (
+                config.get('authentication_sms', 'JSL_ip_whitelist') or ''
+            ).split(','):
+                if ip == ipaddress.ip_network(entry):
+                    return user_id
+
         if user_id:
             SMSCode.send(user_id)
         if 'sms_code' in parameters:
